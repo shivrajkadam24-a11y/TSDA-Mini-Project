@@ -1,0 +1,18 @@
+{
+  "input_record_count": 15839,
+  "start_timestamp_local": "2025-01-01T00:00:00",
+  "end_timestamp_local": "2026-10-22T23:00:00",
+  "duplicate_timestamp_count": 0,
+  "negative_ridership_count": 0,
+  "missing_timestamps_before_repair": [
+    "2026-03-08T02:00:00"
+  ],
+  "imputation_policy": "Median of the preceding 12 matching weekday-and-hour observations; only for expected DST gap.",
+  "output_record_count": 15840,
+  "imputed_record_count": 1,
+  "ridership_min": 7.0,
+  "ridership_max": 19302.0,
+  "ridership_mean": 5556.693,
+  "generated_at_utc": "2026-10-30T16:27:36.983200+00:00",
+  "output_file": "data\\processed\\mta_hourly_station_611_clean.csv"
+}
