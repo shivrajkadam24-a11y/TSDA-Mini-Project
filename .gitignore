@@ -16,4 +16,6 @@ __pycache__/
 # Local configuration and generated application files
 .env
 .streamlit/
+*.log
+/reports/generated/
 
