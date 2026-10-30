@@ -42,3 +42,12 @@ uvicorn metroflow.api.main:app --reload
 
 Open `http://127.0.0.1:8000/docs` to explore `/health`, `/stations`, `/forecast`, `/history`, and `/metrics`.
 
+## Run the dashboard
+
+Keep the API running in one terminal. In another terminal, run:
+
+```powershell
+$env:PYTHONPATH = 'src'
+streamlit run frontend/app.py
+```
+
