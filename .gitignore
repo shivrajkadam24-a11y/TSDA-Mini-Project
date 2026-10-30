@@ -5,10 +5,9 @@ __pycache__/
 .pytest_cache/
 .ipynb_checkpoints/
 
-# Local data snapshots and trained artifacts
-/data/raw/*.csv
-/data/processed/*.parquet
-/data/processed/*.csv
+# Local data snapshots, reports, and trained artifacts
+/data/raw/*
+/data/processed/*
 /models/*
 !data/raw/.gitkeep
 !data/processed/.gitkeep
