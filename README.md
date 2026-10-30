@@ -37,7 +37,7 @@ Run the preparation and experiment steps first, then start the API from the proj
 $env:PYTHONPATH = 'src'
 python -m metroflow.data.prepare
 python -m metroflow.models.experiment
-uvicorn metroflow.api.main:app --reload
+python -m uvicorn metroflow.api.main:app --app-dir src --reload
 ```
 
 Open `http://127.0.0.1:8000/docs` to explore `/health`, `/stations`, `/forecast`, `/history`, and `/metrics`.
@@ -48,6 +48,6 @@ Keep the API running in one terminal. In another terminal, run:
 
 ```powershell
 $env:PYTHONPATH = 'src'
-streamlit run frontend/app.py
+python -m streamlit run frontend/app.py
 ```
 
