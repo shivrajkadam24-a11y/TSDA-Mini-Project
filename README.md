@@ -29,3 +29,16 @@ The ingestion pipeline aggregates individual fare/payment records into one hourl
 
 The detailed scope and acceptance criteria are in [docs/implementation_plan.md](docs/implementation_plan.md).
 
+## Run the backend
+
+Run the preparation and experiment steps first, then start the API from the project root:
+
+```powershell
+$env:PYTHONPATH = 'src'
+python -m metroflow.data.prepare
+python -m metroflow.models.experiment
+uvicorn metroflow.api.main:app --reload
+```
+
+Open `http://127.0.0.1:8000/docs` to explore `/health`, `/stations`, `/forecast`, `/history`, and `/metrics`.
+
