@@ -30,6 +30,12 @@ class ForecastServiceTests(unittest.TestCase):
         self.assertGreater(len(history), 1000)
         self.assertLess(history[0]["timestamp"], history[-1]["timestamp"])
 
+    def test_insights_include_evidence_for_operational_views(self) -> None:
+        insights = self.service.insights()
+        self.assertEqual(len(insights["peak_windows"]), 7)
+        self.assertGreater(insights["seasonality"]["autocorrelation_24h"], 0.8)
+        self.assertGreater(insights["historical_summary"]["p90_hourly_entries"], 0)
+
 
 if __name__ == "__main__":
     unittest.main()

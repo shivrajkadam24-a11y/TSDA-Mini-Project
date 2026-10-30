@@ -56,15 +56,46 @@ class ForecastService:
         for timestamp, prediction in zip(future, predictions):
             key = (timestamp.dayofweek >= 5, timestamp.hour)
             threshold = float(self.thresholds.loc[key])
+            relative_risk = float(prediction / threshold)
             high = bool(prediction >= threshold)
             results.append({
                 "timestamp": timestamp.isoformat(),
                 "predicted_ridership": round(float(prediction), 2),
                 "high_crowding_expected": high,
                 "threshold": round(threshold, 2),
+                "risk_ratio": round(relative_risk, 3),
+                "alert_level": "high" if relative_risk >= 1 else "normal",
                 "recommendation": "Deploy additional staff and issue a peak-period advisory." if high else "Normal staffing level is expected.",
             })
         return results
+
+    def insights(self) -> dict[str, object]:
+        """Return operational summaries derived only from the prepared historical series."""
+        series = self.data.ridership
+        daily = series.resample("D").sum()
+        latest_day = daily.index.max().normalize()
+        latest_total = float(daily.loc[latest_day])
+        prior_week_total = float(daily.loc[latest_day - pd.Timedelta(days=7)])
+        heatmap = self.data.assign(hour=self.data.index.hour, day_name=self.data.index.day_name()).pivot_table(
+            index="day_name", columns="hour", values="ridership", aggfunc="mean"
+        ).reindex(["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"])
+        peak_windows = []
+        for day_name, values in heatmap.iterrows():
+            hour = int(values.idxmax())
+            peak_windows.append({"day": day_name, "peak_hour": hour, "mean_entries": round(float(values.loc[hour]), 2)})
+        return {
+            "historical_summary": {
+                "data_start": self.data.index.min().isoformat(),
+                "data_end": self.data.index.max().isoformat(),
+                "mean_hourly_entries": round(float(series.mean()), 2),
+                "mean_daily_entries": round(float(daily.mean()), 2),
+                "latest_complete_day_entries": round(latest_total, 2),
+                "change_vs_same_weekday_percent": round((latest_total - prior_week_total) / prior_week_total * 100, 2),
+                "p90_hourly_entries": round(float(series.quantile(0.90)), 2),
+            },
+            "peak_windows": peak_windows,
+            "seasonality": {"autocorrelation_24h": round(float(series.autocorr(24)), 4), "autocorrelation_168h": round(float(series.autocorr(168)), 4)},
+        }
 
     def metrics(self) -> dict[str, object]:
         if METRICS_PATH.exists():

@@ -49,3 +49,9 @@ def history(station_id: str = SUPPORTED_STATION_ID, start: datetime | None = Non
 def metrics(station_id: str = SUPPORTED_STATION_ID) -> dict[str, object]:
     verify_station(station_id)
     return get_service().metrics()
+
+
+@app.get("/insights")
+def insights(station_id: str = SUPPORTED_STATION_ID) -> dict[str, object]:
+    verify_station(station_id)
+    return get_service().insights()

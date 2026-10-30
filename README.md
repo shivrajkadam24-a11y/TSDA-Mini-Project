@@ -4,6 +4,14 @@
 
 MetroFlow forecasts hourly subway entries for selected NYC station complexes and turns the forecast into operational alerts for station managers. The first supported station is **Times Sq-42 St / Port Authority Bus Terminal** (station complex ID `611`).
 
+## Application capabilities
+
+- Animated operations-command dashboard with 24-hour to 7-day forecasting views.
+- Historical demand intelligence: recent daily demand, weekday-hour heatmap, and typical peak windows.
+- Forecast-versus-threshold chart and a ranked operational action queue.
+- High-crowding alerts based on the historical 90th percentile for comparable weekday/weekend hours.
+- Transparent model-evidence tab with chronological holdout metrics and limitations.
+
 ## Project objective
 
 Help transit operations teams anticipate high-demand periods so they can plan staff deployment, queue management, and passenger advisories. This is a time-series decision-support application, not only a forecasting notebook.
