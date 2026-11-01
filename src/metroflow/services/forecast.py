@@ -52,6 +52,9 @@ class ForecastService:
     def forecast(self, horizon_hours: int) -> list[dict[str, object]]:
         future = pd.date_range(self.data.index.max() + pd.Timedelta(hours=1), periods=horizon_hours, freq="h")
         predictions = np.clip(self.model.predict(calendar_features(future, self.origin)), 0, None)
+        uncertainty = self.metrics().get("prediction_interval", {}).get("residual_quantiles", {})
+        low = float(uncertainty.get("p10", 0))
+        upper = float(uncertainty.get("p90", 0))
         results = []
         for timestamp, prediction in zip(future, predictions):
             key = (timestamp.dayofweek >= 5, timestamp.hour)
@@ -61,6 +64,9 @@ class ForecastService:
             results.append({
                 "timestamp": timestamp.isoformat(),
                 "predicted_ridership": round(float(prediction), 2),
+                "p10_ridership": round(float(max(0, prediction + low)), 2),
+                "p50_ridership": round(float(prediction), 2),
+                "p90_ridership": round(float(max(0, prediction + upper)), 2),
                 "high_crowding_expected": high,
                 "threshold": round(threshold, 2),
                 "risk_ratio": round(relative_risk, 3),
@@ -68,6 +74,42 @@ class ForecastService:
                 "recommendation": "Deploy additional staff and issue a peak-period advisory." if high else "Normal staffing level is expected.",
             })
         return results
+
+    def simulate_event(
+        self, event_name: str, event_start: datetime, expected_attendance: int,
+        subway_mode_share: float, station_share: float, staff_throughput: int, baseline_staff: int,
+    ) -> dict[str, object]:
+        """Scenario planning using declared event assumptions, not a learned causal uplift."""
+        rows = self.forecast(168)
+        event_time = pd.Timestamp(event_start).floor("h")
+        if event_time.tzinfo is not None:
+            event_time = event_time.tz_localize(None)
+        timestamps = {pd.Timestamp(row["timestamp"]): row for row in rows}
+        if event_time not in timestamps:
+            raise ValueError("Event start must fall within the next 168 forecast hours.")
+        expected_station_entries = expected_attendance * subway_mode_share * station_share
+        weights = {5: 0.05, 4: 0.10, 3: 0.18, 2: 0.27, 1: 0.28, 0: 0.12}
+        impacted = []
+        for hours_before, weight in weights.items():
+            timestamp = event_time - pd.Timedelta(hours=hours_before)
+            row = timestamps.get(timestamp)
+            if row is None:
+                continue
+            additional = expected_station_entries * weight
+            scenario_p90 = float(row["p90_ridership"]) + additional
+            staff_required = int(np.ceil(scenario_p90 / staff_throughput))
+            impacted.append({
+                "timestamp": timestamp.isoformat(), "baseline_p50": row["p50_ridership"],
+                "scenario_p50": round(float(row["p50_ridership"]) + additional, 2),
+                "scenario_p90": round(scenario_p90, 2), "additional_entries": round(additional, 2),
+                "staff_required": staff_required, "additional_staff": max(0, staff_required - baseline_staff),
+            })
+        return {
+            "event_name": event_name, "event_start": event_time.isoformat(),
+            "assumptions": {"expected_attendance": expected_attendance, "subway_mode_share": subway_mode_share, "station_share": station_share, "staff_throughput_entries_per_hour": staff_throughput, "baseline_staff": baseline_staff, "arrival_profile": "5%, 10%, 18%, 27%, 28%, 12% over five hours before through event start"},
+            "expected_station_entries": round(expected_station_entries, 2), "impacted_hours": impacted,
+            "important_limit": "Scenario uplift is based on user-declared attendance and travel-share assumptions. It is not a causal event-demand model.",
+        }
 
     def insights(self) -> dict[str, object]:
         """Return operational summaries derived only from the prepared historical series."""
@@ -92,10 +134,26 @@ class ForecastService:
                 "latest_complete_day_entries": round(latest_total, 2),
                 "change_vs_same_weekday_percent": round((latest_total - prior_week_total) / prior_week_total * 100, 2),
                 "p90_hourly_entries": round(float(series.quantile(0.90)), 2),
+                "imputed_hours": int(self.data.was_imputed.sum()),
             },
             "peak_windows": peak_windows,
             "seasonality": {"autocorrelation_24h": round(float(series.autocorr(24)), 4), "autocorrelation_168h": round(float(series.autocorr(168)), 4)},
         }
+
+    def anomalies(self, days: int = 28) -> dict[str, object]:
+        """Identify unusual historical station-entry values against comparable hours."""
+        frame = self.data.copy()
+        frame["hour"] = frame.index.hour
+        frame["is_weekend"] = frame.index.dayofweek >= 5
+        bounds = frame.groupby(["is_weekend", "hour"]).ridership.quantile([0.05, 0.95]).unstack()
+        recent = frame.tail(days * 24).copy()
+        recent["lower"] = [bounds.loc[(row.is_weekend, row.hour), 0.05] for row in recent.itertuples()]
+        recent["upper"] = [bounds.loc[(row.is_weekend, row.hour), 0.95] for row in recent.itertuples()]
+        recent["anomaly_type"] = np.where(recent.ridership > recent.upper, "unusually_high", np.where(recent.ridership < recent.lower, "unusually_low", "normal"))
+        unusual = recent[recent.anomaly_type != "normal"].copy()
+        weekly = frame.ridership.resample("7D").mean()
+        drift = float((weekly.iloc[-1] - weekly.iloc[-2]) / weekly.iloc[-2] * 100)
+        return {"window_days": days, "anomaly_count": len(unusual), "weekly_mean_change_percent": round(drift, 2), "rows": [{"timestamp": index.isoformat(), "ridership": round(float(row.ridership), 2), "lower_bound": round(float(row.lower), 2), "upper_bound": round(float(row.upper), 2), "type": row.anomaly_type} for index, row in unusual.iterrows()]}
 
     def metrics(self) -> dict[str, object]:
         if METRICS_PATH.exists():

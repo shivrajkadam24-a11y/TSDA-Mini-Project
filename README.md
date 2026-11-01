@@ -11,6 +11,9 @@ MetroFlow forecasts hourly subway entries for selected NYC station complexes and
 - Forecast-versus-threshold chart and a ranked operational action queue.
 - High-crowding alerts based on the historical 90th percentile for comparable weekday/weekend hours.
 - Transparent model-evidence tab with chronological holdout metrics and limitations.
+- P10/P50/P90 demand ranges calibrated from chronological holdout residuals.
+- Event what-if planner that turns stated attendance and travel-share assumptions into an arrival profile and staff plan.
+- Local alert acknowledgement/resolution workflow and comparable-hour anomaly monitoring.
 
 ## Project objective
 

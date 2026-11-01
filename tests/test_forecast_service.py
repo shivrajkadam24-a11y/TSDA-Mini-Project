@@ -22,6 +22,8 @@ class ForecastServiceTests(unittest.TestCase):
         for row in forecast:
             self.assertGreaterEqual(row["predicted_ridership"], 0)
             self.assertGreater(row["threshold"], 0)
+            self.assertLessEqual(row["p10_ridership"], row["p50_ridership"])
+            self.assertLessEqual(row["p50_ridership"], row["p90_ridership"])
             self.assertIsInstance(row["high_crowding_expected"], bool)
             self.assertTrue(row["recommendation"])
 
@@ -35,6 +37,13 @@ class ForecastServiceTests(unittest.TestCase):
         self.assertEqual(len(insights["peak_windows"]), 7)
         self.assertGreater(insights["seasonality"]["autocorrelation_24h"], 0.8)
         self.assertGreater(insights["historical_summary"]["p90_hourly_entries"], 0)
+
+    def test_event_scenario_uses_declared_assumptions_and_produces_staff_plan(self) -> None:
+        event_start = self.service.forecast(24)[-1]["timestamp"]
+        scenario = self.service.simulate_event("Test event", event_start, 10_000, 0.3, 0.2, 900, 6)
+        self.assertEqual(scenario["expected_station_entries"], 600.0)
+        self.assertTrue(scenario["impacted_hours"])
+        self.assertIn("staff_required", scenario["impacted_hours"][-1])
 
 
 if __name__ == "__main__":

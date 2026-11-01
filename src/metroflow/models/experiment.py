@@ -67,6 +67,11 @@ def main() -> None:
     predictions = pd.DataFrame({"actual": test, "seasonal_naive": seasonal_naive, "ridge_calendar": ridge_pred, "hist_gradient_boosting": hgb_pred}, index=test.index)
     result = {name: scores(test, predictions[name].to_numpy()) for name in predictions.columns if name != "actual"}
     winner = min(result, key=lambda name: result[name]["wape_percent"])
+    residuals = predictions["actual"] - predictions[winner]
+    residual_quantiles = {f"p{int(q * 100)}": round(float(residuals.quantile(q)), 2) for q in (0.05, 0.10, 0.50, 0.90, 0.95)}
+    p10 = predictions[winner] + residual_quantiles["p10"]
+    p90 = predictions[winner] + residual_quantiles["p90"]
+    interval_coverage = float(((predictions["actual"] >= p10) & (predictions["actual"] <= p90)).mean() * 100)
     report = {
         "evaluation_design": "Final 28-day chronological holdout. All ML features are known at forecast origin; no future target values are used.",
         "train_start": train.index.min().isoformat(),
@@ -76,6 +81,11 @@ def main() -> None:
         "test_hours": len(test),
         "models": result,
         "selected_by_lowest_wape": winner,
+        "prediction_interval": {
+            "method": "Empirical residual quantiles from the final chronological 28-day holdout.",
+            "residual_quantiles": residual_quantiles,
+            "p10_p90_holdout_coverage_percent": round(interval_coverage, 2),
+        },
         "note": "SARIMAX and ETS are documented planned extensions when statsmodels becomes available; this run remains a valid three-model TSDA/ML comparison.",
     }
     output_dir = Path("reports/generated")

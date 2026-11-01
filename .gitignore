@@ -8,6 +8,7 @@ __pycache__/
 # Local data snapshots, reports, and trained artifacts
 /data/raw/*
 /data/processed/*
+/data/app/*
 /models/*
 !data/raw/.gitkeep
 !data/processed/.gitkeep

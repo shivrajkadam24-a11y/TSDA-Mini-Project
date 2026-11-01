@@ -32,6 +32,11 @@ def api_get(path: str, **params: object) -> dict | list:
     response.raise_for_status()
     return response.json()
 
+def api_post(path: str, payload: dict, **params: object) -> dict:
+    response = requests.post(f"{API_URL}{path}", params=params, json=payload, timeout=60)
+    response.raise_for_status()
+    return response.json()
+
 def format_hour(hour: int) -> str:
     return f"{hour:02d}:00"
 
@@ -62,7 +67,7 @@ def main() -> None:
     c3.metric("Historical daily mean", f"{summary['mean_daily_entries']:,.0f}", "entries/day")
     c4.metric("Latest day vs prior week", f"{summary['change_vs_same_weekday_percent']:+.1f}%", "same weekday")
 
-    overview, seasonal, model = st.tabs(["Forecast command", "Demand intelligence", "Model evidence"])
+    overview, seasonal, scenario, monitor, model = st.tabs(["Forecast command", "Demand intelligence", "Scenario studio", "Monitor", "Model evidence"])
     with overview:
         left, right = st.columns([2.1, 1])
         with left:
@@ -83,6 +88,17 @@ def main() -> None:
         table = forecast[["timestamp", "predicted_ridership", "threshold", "risk_ratio", "alert_level", "recommendation"]].copy()
         table.columns = ["Forecast time", "Predicted entries", "Threshold", "Risk ratio", "Status", "Recommended action"]
         st.dataframe(table, use_container_width=True, hide_index=True, height=330)
+        with st.expander("Acknowledge or resolve an operational alert"):
+            if alerts.empty:
+                st.caption("There are no forecast alerts in the selected horizon.")
+            else:
+                options = {row["timestamp"].isoformat(): row for _, row in alerts.iterrows()}
+                alert_id = st.selectbox("Alert time", options.keys(), format_func=lambda value: pd.Timestamp(value).strftime("%a, %d %b · %H:%M"))
+                status = st.radio("Workflow status", ["acknowledged", "resolved"], horizontal=True)
+                note = st.text_input("Operational note", placeholder="e.g., Extra queue staff assigned")
+                if st.button("Save alert update", type="primary"):
+                    api_post(f"/alerts/{alert_id}/feedback", {"status": status, "note": note})
+                    st.success("Alert workflow updated locally.")
     with seasonal:
         hist_start = (pd.Timestamp(health["data_end"]) - pd.Timedelta(days=28)).isoformat()
         history = pd.DataFrame(api_get("/history", station_id=station["station_id"], start=hist_start)["history"])
@@ -102,6 +118,53 @@ def main() -> None:
         st.markdown("#### Typical peak windows")
         peaks = pd.DataFrame(insights["peak_windows"]); peaks["Peak hour"] = peaks.peak_hour.map(format_hour); peaks = peaks[["day", "Peak hour", "mean_entries"]].rename(columns={"day":"Day", "mean_entries":"Mean entries"})
         st.dataframe(peaks, use_container_width=True, hide_index=True)
+    with scenario:
+        st.markdown("#### Event and staffing what-if planner")
+        st.caption("Use this when event details are known. The calculation transparently applies your stated attendance and travel-share assumptions; it does not claim to infer a causal event effect from historical data.")
+        left, right = st.columns(2)
+        with left:
+            event_name = st.text_input("Event name", value="Nearby venue event")
+            event_date = st.date_input("Event date", value=forecast.timestamp.iloc[min(24, len(forecast)-1)].date())
+            event_time = st.time_input("Event start time", value=forecast.timestamp.iloc[min(24, len(forecast)-1)].time())
+            attendance = st.number_input("Expected attendance", min_value=0, max_value=500000, value=12000, step=500)
+        with right:
+            subway_share = st.slider("Expected subway travel share", 0.0, 1.0, 0.35, 0.01)
+            station_share = st.slider("Share expected to use this station complex", 0.0, 1.0, 0.20, 0.01)
+            throughput = st.number_input("Entries one staff member can support per hour", min_value=1, max_value=10000, value=900, step=50)
+            baseline_staff = st.number_input("Current planned staff", min_value=0, max_value=500, value=6)
+        if st.button("Run event scenario", type="primary"):
+            event_start = pd.Timestamp.combine(pd.Timestamp(event_date), event_time)
+            payload = {"event_name": event_name, "event_start": event_start.isoformat(), "expected_attendance": attendance, "subway_mode_share": subway_share, "station_share": station_share, "staff_throughput": throughput, "baseline_staff": baseline_staff}
+            try:
+                result = api_post("/scenario/event", payload, station_id=station["station_id"])
+                scenario_rows = pd.DataFrame(result["impacted_hours"])
+                scenario_rows["timestamp"] = pd.to_datetime(scenario_rows["timestamp"])
+                st.success(f"Estimated additional station entries: {result['expected_station_entries']:,.0f}")
+                chart = go.Figure()
+                chart.add_trace(go.Bar(x=scenario_rows.timestamp, y=scenario_rows.baseline_p50, name="Baseline P50", marker_color="#4bc7ff"))
+                chart.add_trace(go.Bar(x=scenario_rows.timestamp, y=scenario_rows.additional_entries, name="Event entries", marker_color="#f5b942"))
+                chart.update_layout(barmode="stack", template="plotly_dark", title="Assumption-led event scenario", xaxis_title="Arrival hour", yaxis_title="Estimated entries", paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(8,25,42,.45)")
+                st.plotly_chart(chart, use_container_width=True)
+                st.dataframe(scenario_rows[["timestamp", "additional_entries", "scenario_p90", "staff_required", "additional_staff"]], use_container_width=True, hide_index=True)
+                st.warning(result["important_limit"])
+            except requests.RequestException as error:
+                st.error(f"Scenario could not run: {error}")
+    with monitor:
+        anomaly = api_get("/anomalies", station_id=station["station_id"], days=28)
+        a1, a2, a3 = st.columns(3)
+        a1.metric("Unusual historical hours", anomaly["anomaly_count"], "last 28 days")
+        a2.metric("Weekly mean demand shift", f"{anomaly['weekly_mean_change_percent']:+.1f}%")
+        a3.metric("Quality-repaired hours", summary.get("imputed_hours", 1), "DST only")
+        st.caption("An anomaly is an observed entry count outside the historical 5th–95th percentile for the same hour and weekday/weekend type. It is a review signal, not proof of an incident.")
+        anomaly_rows = pd.DataFrame(anomaly["rows"])
+        if anomaly_rows.empty:
+            st.success("No unusual historical hours in the selected monitoring window.")
+        else:
+            anomaly_rows["timestamp"] = pd.to_datetime(anomaly_rows["timestamp"])
+            fig = px.scatter(anomaly_rows, x="timestamp", y="ridership", color="type", hover_data=["lower_bound", "upper_bound"], title="Historical demand anomalies requiring review", color_discrete_map={"unusually_high":"#ff5d73", "unusually_low":"#f5b942"})
+            fig.update_layout(template="plotly_dark", paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(8,25,42,.45)", yaxis_title="Observed entries")
+            st.plotly_chart(fig, use_container_width=True)
+            st.dataframe(anomaly_rows, use_container_width=True, hide_index=True)
     with model:
         metrics = api_get("/metrics", station_id=station["station_id"])
         st.markdown("#### Chronological holdout evidence"); st.caption(metrics.get("evaluation_design", ""))

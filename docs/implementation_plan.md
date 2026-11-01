@@ -92,6 +92,15 @@ NY Open Data API -> ingestion/preprocessing -> trained model + thresholds
 
 The final submission will include a working frontend and backend, not a notebook alone. It will demonstrate a complete user flow: select a station -> request forecast -> view peak alerts -> interpret staffing/advisory recommendation. It will also include source documentation, model comparison, reproducible setup instructions, report, screenshots, and viva-ready explanation of every pipeline stage.
 
+## 5.1 Practical innovation layer
+
+MetroFlow goes beyond a forecast chart through four operational features:
+
+- **Uncertainty-aware demand:** P10/P50/P90 ranges use empirical residual quantiles from the chronological holdout, with reported coverage.
+- **Event what-if planning:** users declare attendance, expected subway share, and expected station share. The system calculates station entries and distributes them across an explicitly stated arrival profile. This is an assumption-led planner, not a causal event-effect claim.
+- **Resource planning:** each scenario converts P90 demand to the required staff count using a declared entries-per-staff-hour throughput assumption.
+- **Human-in-the-loop alerts:** users can acknowledge or resolve a forecast alert and retain a local operational note. Historical anomaly monitoring flags comparable-hour outliers for review.
+
 ## 6. Build milestones
 
 | Milestone | Deliverable | Exit criterion |
