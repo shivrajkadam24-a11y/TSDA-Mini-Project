@@ -72,7 +72,9 @@ def main() -> None:
         left, right = st.columns([2.1, 1])
         with left:
             chart = go.Figure()
-            chart.add_trace(go.Scatter(x=forecast.timestamp, y=forecast.predicted_ridership, mode="lines+markers", name="Predicted entries", line={"color":"#4bc7ff","width":3}, marker={"size":5}))
+            chart.add_trace(go.Scatter(x=forecast.timestamp, y=forecast.p90_ridership, mode="lines", name="P90 demand", line={"color":"rgba(75,199,255,.25)","width":1}))
+            chart.add_trace(go.Scatter(x=forecast.timestamp, y=forecast.p10_ridership, mode="lines", name="P10 demand", fill="tonexty", fillcolor="rgba(75,199,255,.13)", line={"color":"rgba(75,199,255,.25)","width":1}))
+            chart.add_trace(go.Scatter(x=forecast.timestamp, y=forecast.p50_ridership, mode="lines+markers", name="P50 forecast", line={"color":"#4bc7ff","width":3}, marker={"size":5}))
             chart.add_trace(go.Scatter(x=forecast.timestamp, y=forecast.threshold, mode="lines", name="Alert threshold", line={"color":"#f5b942","dash":"dash"}))
             chart.add_trace(go.Scatter(x=alerts.timestamp, y=alerts.predicted_ridership, mode="markers", name="High-risk hour", marker={"color":"#ff5d73","size":11,"symbol":"diamond"}))
             chart.update_layout(template="plotly_dark", height=440, title="Footfall forecast against peak-risk threshold", xaxis_title="Forecast time", yaxis_title="Estimated entries", legend={"orientation":"h","y":1.12}, margin={"l":0,"r":0,"t":58,"b":0}, paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(8,25,42,.45)")
